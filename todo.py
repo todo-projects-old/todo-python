@@ -1,6 +1,7 @@
 #!/usr/bin/python 
 
 import os
+import io
 import sys
 import datetime
 from subprocess import Popen, PIPE
@@ -90,20 +91,57 @@ def execute(args):
 def getHandler(name):
     for command in COMMANDS:
         for commandName in command['names']:
-            if (name == commandName):
+            if name == commandName:
                return command['handler'] 
     return None
  
 def main():
-    totalArgs = len(sys.argv)
+    commands = []
     firstArg = sys.argv[1]
     multiCommandMode = firstArg.startswith('-')
     if not multiCommandMode:
-        name = firstArg
-        handler = getHandler(name)
+        commands.append({'name': firstArg, 'args': sys.argv[2:]})
+    else:
+        name = None
+        args = []
+        for arg in sys.argv[1:]:
+            if arg.startswith('-'):
+                if name is not None:
+                    commands.append({'name': name, 'args': args})
+                    args = []
+                if arg.startswith('--'):
+                    name = arg[2:]
+                else:
+                    name = None
+                    for short in arg[1:]:
+                        if name is not None:
+                            commands.append({'name': name, 'args': []})
+                        name = short
+            else:
+                args.append(arg)
+        if name is not None:
+            commands.append({'name': name, 'args': args})
+    stdin = sys.stdin
+    stdout = sys.stdout
+    memin = io.BytesIO()
+    memout = io.BytesIO()
+    for index, command in enumerate(commands):
+        if index != 0:
+            sys.stdin = memin
+        else:
+            sys.stdin = stdin
+        if index != len(commands) - 1:
+            sys.stdout = memout
+        else:
+            sys.stdout = stdout
+        handler = getHandler(command['name'])
         if handler is not None:
-            args = sys.argv[2:]
-            handler.run(args)
-    #else:
-
+            handler.run(command['args'])
+        else:
+            sys.stdout = stdout
+            print "Command not found: " + command['name']
+            sys.exit(1)
+        memout.seek(0)
+        memin = memout
+        memout = io.BytesIO()
 main()
