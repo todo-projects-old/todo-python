@@ -1,14 +1,22 @@
-#!/usr/bin/python 
+#!/usr/bin/python3
 
 import os
 import io
 import re
 import sys
 import datetime
+import configparser
 from subprocess import Popen, PIPE
 
+config = configparser.ConfigParser()
+config['Issues'] = {'dir_names': ['issues']}
+configPathes = [os.path.expanduser('~') + '/.todo/todo.conf', 'todo.conf']
+for path in configPathes:
+    if os.path.isfile(path):
+        config.read(path)
+
 class Todo:
-    issuesDirs = ['issues']
+    issuesDirs = config['Issues']['dir_names']
     
     @staticmethod
     def getIssuesDirList():
@@ -17,7 +25,7 @@ class Todo:
             for subdir in subdirs:
                 if subdir in Todo.issuesDirs:
                     issuesDirList.append(os.path.join(root, subdir))
-        #print issuesDirList
+        #print(issuesDirList)
         return issuesDirList    
     
     @staticmethod
@@ -58,7 +66,7 @@ class List:
             if os.path.isdir(path):
                 List.printIssues(path, inIssues or (f in Todo.issuesDirs))
             elif inIssues and os.path.isfile(path):
-                print path
+                print(path)
     
     @staticmethod
     def printProjects(root):
@@ -66,7 +74,7 @@ class List:
             path = os.path.join(root, f)
             if os.path.isdir(path):
                 if f in Todo.issuesDirs:
-                    print root
+                    print(root)
                 else:
                     List.printProjects(path)
                 
@@ -90,7 +98,7 @@ class View:
         for line in sys.stdin:
             line = line.strip()
             data = Todo.getIssueData(line)
-            print data['project'] + "\t" + data['scope'] + "\t" + data['name']
+            print(data['project'] + "\t" + data['scope'] + "\t" + data['name'])
     
     def __init__(self):
         self.name = 'view'
@@ -120,7 +128,7 @@ class Filter:
         for line in sys.stdin:
             line = line.strip()
             if (regexp == None) or (regexp.search(line) != None):
-                print line
+                print(line)
 
 class Sort:
     def __init__(self):
@@ -131,10 +139,11 @@ class Sort:
         lines.sort()
         for line in lines:
             line = line.strip()
-            print line
+            print(line)
 
 
 COMMANDS = [
+    {'names': ['a', 'add'], 'handler': Add()},
     {'names': ['l', 'list'], 'handler': List()},
     {'names': ['v', 'view'], 'handler': View()},
     {'names': ['d', 'do', 'util'], 'handler': Do()},
@@ -197,7 +206,7 @@ def main():
             handler.run(command['args'])
         else:
             sys.stdout = stdout
-            print "Command not found: " + command['name']
+            print("Command not found: " + command['name'])
             sys.exit(1)
         memout.seek(0)
         memin = memout
