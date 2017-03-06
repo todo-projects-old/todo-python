@@ -37,9 +37,20 @@ class Todo:
                     'scope': path[index + len(separator):lastSlash],
                     'name': path[lastSlash + 1:]
                 }
+
+class Add:
+    def __init__(self):
+        self.name = 'add'
         
-        
+    def run(self, args):
+        for arg in args:
+            line = line.strip()
+            args.append(line)
+        execute(args)
+
+
 class List:
+    projectCommands = ['p', 'prj', 'project', 'projects']
     @staticmethod
     def printIssues(root, inIssues):
         for f in os.listdir(root):
@@ -49,11 +60,28 @@ class List:
             elif inIssues and os.path.isfile(path):
                 print path
     
+    @staticmethod
+    def printProjects(root):
+        for f in os.listdir(root):
+            path = os.path.join(root, f)
+            if os.path.isdir(path):
+                if f in Todo.issuesDirs:
+                    print root
+                else:
+                    List.printProjects(path)
+                
     def __init__(self):
         self.name = 'list'
         
     def run(self, args):
-        List.printIssues('.', False)
+        projectsMode = False
+        for arg in args:
+            if arg in List.projectCommands:
+                projectsMode = True
+        if projectsMode:
+            List.printProjects('.')
+        else:
+            List.printIssues('.', False)
 
 
 class View:
