@@ -2,6 +2,7 @@
 
 import os
 import io
+import re
 import sys
 import datetime
 from subprocess import Popen, PIPE
@@ -25,7 +26,10 @@ class Todo:
             path = path[2:]
         for d in Todo.issuesDirs:
             separator = '/' + d + '/'
-            index = path.find(separator)
+            if path.startswith(separator[1:]):
+                index = 0
+            else:
+                index = path.find(separator)
             if index >= 0:
                 lastSlash = path.rfind('/')
                 return {
@@ -77,11 +81,37 @@ class Do:
             args.append(line)
         execute(args)
 
+class Filter:
+    def __init__(self):
+        self.name = 'filter'
+        
+    def run(self, args):
+        regexp = None
+        if len(args) > 0:
+            regexp = re.compile(args[0])
+        for line in sys.stdin:
+            line = line.strip()
+            if (regexp == None) or (regexp.search(line) != None):
+                print line
+
+class Sort:
+    def __init__(self):
+        self.name = 'sort'
+        
+    def run(self, args):
+        lines = sys.stdin.readlines()           
+        lines.sort()
+        for line in lines:
+            line = line.strip()
+            print line
+
 
 COMMANDS = [
     {'names': ['l', 'list'], 'handler': List()},
     {'names': ['v', 'view'], 'handler': View()},
-    {'names': ['d', 'do', 'util'], 'handler': Do()}
+    {'names': ['d', 'do', 'util'], 'handler': Do()},
+    {'names': ['f', 'filter'], 'handler': Filter()},
+    {'names': ['s', 'sort'], 'handler': Sort()}
 ]
 
 def execute(args):
