@@ -4,6 +4,7 @@ import os
 import io
 import re
 import sys
+import time
 import datetime
 import configparser
 from subprocess import Popen, PIPE
@@ -14,7 +15,18 @@ class Todo:
     @staticmethod
     def initConfig():
         Todo.config = configparser.ConfigParser()
-        Todo.config['Issues'] = {'dir_names': ['issues']}
+        Todo.config['Issues'] = {
+            'dir_names': ['issues'],
+            'default_priority': 'B',
+            'default_scope': '',
+            'extension': '.md',
+            'file_name_separator': '.',
+            'id_seq_file': 'todo.conf',
+            'local_seq_file': True
+        }
+        Todo.config['User'] = {
+            'name': 'Unknown'
+        }
         configPathes = [os.path.expanduser('~') + '/.todo/todo.conf', 'todo.conf']
         for path in configPathes:
             if os.path.isfile(path):
@@ -38,7 +50,15 @@ class Todo:
                 if subdir in Todo.getIssuesDirNames():
                     issuesDirList.append(os.path.join(root, subdir))
         #print(issuesDirList)
-        return issuesDirList    
+        return issuesDirList
+    
+    @staticmethod
+    def getActualIssuesDirName(root):
+        for f in os.listdir(root):
+            path = os.path.join(root, f)
+            if os.path.isdir(path) and f in Todo.getIssuesDirNames():
+                return f
+        return None
     
     @staticmethod
     def getIssueData(path):
@@ -57,6 +77,7 @@ class Todo:
                     'scope': path[index + len(separator):lastSlash],
                     'name': path[lastSlash + 1:]
                 }
+    
     @staticmethod
     def parseArg(arg):
         param = None
@@ -99,32 +120,120 @@ class MemIO:
         self.outToStdout()
     
 class Add:
-    projectCommands = ['p', 'prj', 'project']
+    projectKeys = ['p', 'prj', 'project']
+    priorityKeys = ['t', 'top', 'priority']
+    idKeys = ['i', 'id']
+    nameKeys = ['n', 'name']
+    userKeys = ['u', 'user', 'username']
+    scopeKeys = ['s', 'scope']
     
     def __init__(self):
         self.name = 'add'
     
+    @staticmethod
+    def getDefaultIssueParams():
+        return {
+            'user': Todo.getConfig()['User']['name'],
+            'root': '.',
+            'issues_dir': None,
+            'top': Todo.getConfig()['Issues']['default_priority'],
+            'seq_file_name': Todo.getConfig()['Issues']['id_seq_file'],
+            'ext': Todo.getConfig()['Issues']['extension'],
+            'sep': Todo.getConfig()['Issues']['file_name_separator'],
+            'id': None,
+            'scope': Todo.getConfig()['Issues']['default_scope'],
+            'name': ''
+        }
+    
+    @staticmethod
+    def seqNextId(root, seqFileName):
+        nextId = None
+        if len(seqFileName) > 0:
+            if Todo.getConfig()['Issues']['local_seq_file']:
+                path = os.path.join(root, seqFileName)
+                if not os.path.isfile(path):
+                    path = os.path.join('.', seqFileName)
+            else:
+                path = seqFileName
+            if os.path.isfile(path):
+                seqFile = open(path, 'r+')
+                nextId = int(seqFile.read().strip())
+                seqFile.seek(0)
+                seqFile.write(str(nextId + 1))
+                seqFile.truncate()
+                seqFile.close()
+        return nextId
+    
+    @staticmethod
+    def createNewIssue(params):
+        path = os.path.join(params['root'], params['issues_dir'], params['scope'], '')
+        if not os.path.exists(path):
+            os.makedirs(path)
+        
+        allParts = params['name']
+        if params['id'] and params['name']:
+            allParts = params['sep'] + allParts
+        allParts = params['id'] + allParts
+        if params['top'] and allParts:
+            allParts = params['sep'] + allParts
+        allParts = params['top'] + allParts
+       
+        issue = path + allParts + params['ext']
+        if os.path.exists(issue):
+            print("Issue is exist: " + issue)
+            sys.exit(1)
+        open(issue, 'a').close()
+        print(issue)
+    
     def run(self, args):
-        root = '.'
+        params = Add.getDefaultIssueParams()
         for arg in args:
             param = Todo.parseArg(arg)
-            if param != None and param['key'] in Add.projectCommands:
-                projectSearch = param['value']
-                memio = MemIO()
-                memio.outToMem()
-                List.printProjects(root)
-                memio.switch()
-                f = Filter()
-                f.run([projectSearch])
-                memio.switch()
-                memio.outToStdout()
-                for line in sys.stdin:
-                    line = line.strip()
-                    print(line)
-
+            if param != None:
+                if param['key'] in Add.projectKeys:
+                    memio = MemIO()
+                    memio.outToMem()
+                    List.printProjects(params['root'])
+                    memio.switch()
+                    f = Filter()
+                    f.run([param['value']])
+                    memio.switch()
+                    s = Sort()
+                    s.run([])
+                    memio.switch()
+                    memio.outToStdout()
+                    for line in sys.stdin:
+                        params['root'] = line.strip()
+                        break
+                elif param['key'] in Add.priorityKeys:
+                    params['top'] = param['value']
+                elif param['key'] in Add.idKeys:
+                    params['id'] = param['value']
+                elif param['key'] in Add.nameKeys:
+                    params['name'] = param['value']
+                elif param['key'] in Add.userKeys:
+                    params['user'] = param['value']
+                elif param['key'] in Add.scopeKeys:
+                    params['scope'] = param['value']
+            else:
+                if params['name'] != '':
+                    params['name'] += ' '
+                params['name'] += arg
+        params['issues_dir'] = Todo.getActualIssuesDirName(params['root'])
+        if params['issues_dir'] == None:
+            print("Issues dir not found")
+            sys.exit(1)
+            
+        if params['id'] == None:
+            nextId = Add.seqNextId(params['root'], params['seq_file_name'])
+            if nextId != None:
+                params['id'] = str(nextId)
+            else:
+                params['id'] = params['user'] + '_' + str(int(time.time()))
+        Add.createNewIssue(params)
 
 class List:
-    projectCommands = ['p', 'prj', 'project', 'projects']
+    projectKeys = ['p', 'prj', 'project', 'projects']
     
     @staticmethod
     def printIssues(root, inIssues):
@@ -162,7 +271,7 @@ class List:
     def run(self, args):
         projectsMode = False
         for arg in args:
-            if arg in List.projectCommands:
+            if arg in List.projectKeys:
                 projectsMode = True
         if projectsMode:
             List.printProjects('.')
