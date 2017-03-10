@@ -12,6 +12,14 @@ from subprocess import Popen, PIPE
 class Todo:
     config = None
     
+    projectKeys = ['p', 'prj', 'project']
+    priorityKeys = ['t', 'top', 'priority']
+    idKeys = ['i', 'id']
+    nameKeys = ['n', 'name']
+    userKeys = ['u', 'user', 'username']
+    scopeKeys = ['s', 'scope']
+    messageKeys = ['m', 'msg', 'message']
+    
     @staticmethod
     def initConfig():
         Todo.config = configparser.ConfigParser()
@@ -120,13 +128,6 @@ class MemIO:
         self.outToStdout()
     
 class Add:
-    projectKeys = ['p', 'prj', 'project']
-    priorityKeys = ['t', 'top', 'priority']
-    idKeys = ['i', 'id']
-    nameKeys = ['n', 'name']
-    userKeys = ['u', 'user', 'username']
-    scopeKeys = ['s', 'scope']
-    
     def __init__(self):
         self.name = 'add'
     
@@ -190,7 +191,7 @@ class Add:
         for arg in args:
             param = Todo.parseArg(arg)
             if param != None:
-                if param['key'] in Add.projectKeys:
+                if param['key'] in Todo.projectKeys:
                     memio = MemIO()
                     memio.outToMem()
                     List.printProjects(params['root'])
@@ -205,15 +206,15 @@ class Add:
                     for line in sys.stdin:
                         params['root'] = line.strip()
                         break
-                elif param['key'] in Add.priorityKeys:
+                elif param['key'] in Todo.priorityKeys:
                     params['top'] = param['value']
-                elif param['key'] in Add.idKeys:
+                elif param['key'] in Todo.idKeys:
                     params['id'] = param['value']
-                elif param['key'] in Add.nameKeys:
+                elif param['key'] in Todo.nameKeys:
                     params['name'] = param['value']
-                elif param['key'] in Add.userKeys:
+                elif param['key'] in Todo.userKeys:
                     params['user'] = param['value']
-                elif param['key'] in Add.scopeKeys:
+                elif param['key'] in Todo.scopeKeys:
                     params['scope'] = param['value']
             else:
                 if params['name'] != '':
@@ -232,9 +233,7 @@ class Add:
                 params['id'] = params['user'] + '_' + str(int(time.time()))
         Add.createNewIssue(params)
 
-class List:
-    projectKeys = ['p', 'prj', 'project', 'projects']
-    
+class List:    
     @staticmethod
     def printIssues(root, inIssues):
         for f in os.listdir(root):
@@ -271,7 +270,7 @@ class List:
     def run(self, args):
         projectsMode = False
         for arg in args:
-            if arg in List.projectKeys:
+            if arg in Todo.projectKeys:
                 projectsMode = True
         if projectsMode:
             List.printProjects('.')
@@ -328,6 +327,39 @@ class Sort:
             line = line.strip()
             print(line)
 
+class Comment:
+    def __init__(self):
+        self.name = 'comment'
+
+    def run(self, args):
+        msg = ''
+        user = Todo.getConfig()['User']['name']
+        for arg in args:
+            param = Todo.parseArg(arg)
+            if param != None:
+                if param['key'] in Todo.messageKeys:
+                    msg = param['value']
+                elif param['key'] in Todo.userKeys:
+                    user = param['value']
+        if msg:
+            msg += '\n'
+        for line in sys.stdin:
+            line = line.strip()
+            header = '# ' + user + ' ' + datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            fh = open(line, 'rb')
+            statinfo = os.stat(line)
+            if statinfo.st_size > 8:
+                fh.seek(-8, 2)
+            rawLines = fh.readlines()
+            content = '\n' + header + '\n\n' + msg
+            if len(rawLines) > 0 and rawLines[-1][-1] != 10:
+                content = '\n' + content
+            fh.close()
+            fh = open(line, 'a')
+            fh.write(content)
+            fh.close()
+            print(line)
+
 
 COMMANDS = [
     {'names': ['a', 'add'], 'handler': Add()},
@@ -335,7 +367,8 @@ COMMANDS = [
     {'names': ['v', 'view'], 'handler': View()},
     {'names': ['d', 'do', 'util'], 'handler': Do()},
     {'names': ['f', 'filter'], 'handler': Filter()},
-    {'names': ['s', 'sort'], 'handler': Sort()}
+    {'names': ['s', 'sort'], 'handler': Sort()},
+    {'names': ['c', 'comment'], 'handler': Comment()}
 ]
 
 def execute(args):
